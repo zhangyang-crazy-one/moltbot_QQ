@@ -89,11 +89,18 @@ export async function handleOb11Event(params: {
     }
     const parsed = parseOb11Message(event.message ?? event.raw_message);
     const rawBody = parsed.text.trim();
-    if (!rawBody) {
+
+    // Check if message has any content (text or attachments)
+    const hasTextContent = rawBody.length > 0;
+    const hasMediaContent = (event.message && Array.isArray(event.message))
+      ? event.message.some(seg => seg.type === "image" || seg.type === "video" || seg.type === "record")
+      : false;
+
+    if (!hasTextContent && !hasMediaContent) {
       console.error(`[DEBUG] handleOb11Event: rejected - empty message body`);
       return;
     }
-    console.error(`[DEBUG] handleOb11Event: message body="${rawBody}"`);
+    console.error(`[DEBUG] handleOb11Event: message body="${rawBody}", hasMedia=${hasMediaContent}`);
 
     if (postType === "message_sent") {
       const messageId = event.message_id != null ? String(event.message_id) : undefined;
