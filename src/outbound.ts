@@ -3,16 +3,15 @@ import type {
   ChannelOutboundContext,
   ChannelOutboundTargetMode,
   OutboundDeliveryResult,
-} from "clawdbot/plugin-sdk";
-import { DEFAULT_ACCOUNT_ID } from "clawdbot/plugin-sdk";
-
+} from "openclaw/plugin-sdk";
+import { DEFAULT_ACCOUNT_ID } from "openclaw/plugin-sdk";
+import type { OB11ActionResponse } from "./types.js";
 import { getActiveQqClient } from "./adapter.js";
 import { resolveQqAccount } from "./config.js";
 import { getQqRuntime } from "./runtime.js";
-import { sendOb11Message } from "./send.js";
 import { extractMessageIdFromResponse, rememberSelfSentResponse } from "./self-sent.js";
+import { sendOb11Message } from "./send.js";
 import { formatQqTarget, normalizeAllowEntry, parseQqTarget, type QQTarget } from "./targets.js";
-import type { OB11ActionResponse } from "./types.js";
 function resolveMessageId(response: OB11ActionResponse): string {
   return extractMessageIdFromResponse(response) ?? String(Date.now());
 }
@@ -23,7 +22,10 @@ function normalizeAllowList(allowFrom: Array<string | number> | undefined): {
 } {
   const raw = (allowFrom ?? []).map((entry) => String(entry).trim()).filter(Boolean);
   const hasWildcard = raw.includes("*");
-  const list = raw.filter((entry) => entry !== "*").map(normalizeAllowEntry).filter(Boolean);
+  const list = raw
+    .filter((entry) => entry !== "*")
+    .map(normalizeAllowEntry)
+    .filter(Boolean);
   return { list, hasWildcard };
 }
 
@@ -40,7 +42,11 @@ function resolveOutboundTarget(params: {
     if (!parsed) {
       return { ok: false, error: new Error("Invalid QQ target") };
     }
-    if ((params.mode === "implicit" || params.mode === "heartbeat") && list.length > 0 && !hasWildcard) {
+    if (
+      (params.mode === "implicit" || params.mode === "heartbeat") &&
+      list.length > 0 &&
+      !hasWildcard
+    ) {
       const formatted = formatQqTarget(parsed);
       if (!list.includes(formatted)) {
         const fallback = parseQqTarget(list[0] ?? "");
@@ -74,21 +80,18 @@ async function sendMessage(params: {
   const account = resolveQqAccount({ cfg, accountId: resolvedAccountId });
 
   if (!account.enabled) {
-    throw new Error(`QQ account disabled: ${resolvedAccountId}`);
+    throw new Error(`QQ account disabled: ${account.accountId}`);
   }
 
-  const allowFrom = [
-    ...(account.config.allowFrom ?? []),
-    ...(account.config.groupAllowFrom ?? []),
-  ];
+  const allowFrom = [...(account.config.allowFrom ?? []), ...(account.config.groupAllowFrom ?? [])];
   const targetResult = resolveOutboundTarget({ to, allowFrom });
   if (!targetResult.ok) {
     throw targetResult.error;
   }
 
-  const client = getActiveQqClient(resolvedAccountId);
+  const client = getActiveQqClient(account.accountId);
   if (!client) {
-    throw new Error(`QQ client not running for account ${resolvedAccountId}`);
+    throw new Error(`QQ client not running for account ${account.accountId}`);
   }
 
   const response = await sendOb11Message({
@@ -114,8 +117,12 @@ async function sendMessage(params: {
 }
 
 export const qqOutbound: ChannelOutboundAdapter = {
-  deliveryMode: "direct",
-  chunker: (text, limit) => getQqRuntime().channel.text.chunkMarkdownText(text, limit),
+  deliveryMode: "gateway",
+  chunker: (text, limit) => {
+    const runtime = getQqRuntime();
+    if (!runtime) return [text];
+    return runtime.channel.text.chunkMarkdownText(text, limit);
+  },
   chunkerMode: "markdown",
   textChunkLimit: 2000,
   resolveTarget: ({ to, allowFrom, mode }) => {

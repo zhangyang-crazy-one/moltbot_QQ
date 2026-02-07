@@ -52,9 +52,7 @@ function renderOb11Segments(segments: OB11MessageSegment[]): ParsedMessage {
   };
 }
 
-export function parseOb11Message(
-  message?: string | OB11MessageSegment[],
-): ParsedMessage {
+export function parseOb11Message(message?: string | OB11MessageSegment[]): ParsedMessage {
   if (!message) {
     return { text: "", mentions: [] };
   }

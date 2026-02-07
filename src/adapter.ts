@@ -1,5 +1,4 @@
 import WebSocket from "ws";
-
 import type {
   OB11ActionResponse,
   OB11Event,
@@ -36,10 +35,13 @@ export type Ob11Client = {
 const activeClients = new Map<string, Ob11Client>();
 
 export function getActiveQqClient(accountId: string): Ob11Client | undefined {
-  return activeClients.get(accountId);
+  const client = activeClients.get(accountId);
+  console.error(`[DEBUG] getActiveQqClient: looking up accountId=${accountId}, found=${!!client}, activeClients.size=${activeClients.size}, activeClients.keys=${JSON.stringify([...activeClients.keys()])}`);
+  return client;
 }
 
 export function clearActiveQqClient(accountId: string): void {
+  console.error(`[DEBUG] clearActiveQqClient: clearing accountId=${accountId}, current activeClients.keys=${JSON.stringify([...activeClients.keys()])}`);
   activeClients.delete(accountId);
 }
 
@@ -66,15 +68,11 @@ export async function startQqClient(params: {
   }
 
   activeClients.set(accountId, client);
+  console.error(`[DEBUG] startQqClient: registered client for accountId=${accountId}, activeClients.size=${activeClients.size}, activeClients.keys=${JSON.stringify([...activeClients.keys()])}`);
   return client;
 }
 
-function buildWsUrl(params: {
-  host: string;
-  port: number;
-  path: string;
-  token?: string;
-}): string {
+function buildWsUrl(params: { host: string; port: number; path: string; token?: string }): string {
   const base = `ws://${params.host}:${params.port}${params.path}`;
   if (!params.token) return base;
   const url = new URL(base);
@@ -277,6 +275,7 @@ class Ob11WsClient implements Ob11Client {
   }
 
   private handleEventMessage(payload: string): void {
+    console.error(`[DEBUG] handleEventMessage received: ${payload.substring(0, 200)}`);
     let event: OB11Event | null = null;
     try {
       event = JSON.parse(payload) as OB11Event;
@@ -284,7 +283,12 @@ class Ob11WsClient implements Ob11Client {
       this.params.log.warn(`QQ event parse failed: ${String(err)}`);
       return;
     }
-    this.params.onEvent(event);
+    console.error(`[DEBUG] handleEventMessage dispatching: post_type=${event.post_type}, message_type=${event.message_type}`);
+    try {
+      this.params.onEvent(event);
+    } catch (err) {
+      this.params.log.error(`QQ event dispatch failed: ${String(err)}`);
+    }
   }
 }
 

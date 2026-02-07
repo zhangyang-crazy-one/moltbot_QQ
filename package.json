@@ -1,54 +1,14 @@
 {
   "name": "@moltbot/qq",
-  "version": "0.1.0",
+  "version": "2026.2.4",
+  "description": "QQ channel plugin via OneBot 11",
   "type": "module",
-  "description": "QQ channel plugin for Clawdbot (OneBot 11 client)",
-  "clawdbot": {
+  "devDependencies": {
+    "openclaw": "workspace:*"
+  },
+  "openclaw": {
     "extensions": [
       "./index.ts"
-    ],
-    "channel": {
-      "id": "qq",
-      "label": "QQ",
-      "selectionLabel": "QQ (OneBot 11)",
-      "docsPath": "/channels/qq",
-      "docsLabel": "qq",
-      "blurb": "QQ via OneBot 11 backends (LLOneBot/napcat/go-cqhttp).",
-      "order": 90,
-      "quickstartAllowFrom": true
-    },
-    "install": {
-      "npmSpec": "@moltbot/qq",
-      "localPath": ".",
-      "defaultChoice": "npm"
-    }
-  },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
-  },
-  "files": [
-    "dist/**",
-    "src/**",
-    "README.md"
-  ],
-  "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch"
-  },
-  "dependencies": {
-    "ws": "^8.19.0",
-    "zod": "^4.3.6"
-  },
-  "peerDependencies": {
-    "moltbot": ">=2026.1.26"
-  },
-  "devDependencies": {
-    "typescript": "^5.9.3",
-    "@types/ws": "^8.18.1"
+    ]
   }
 }

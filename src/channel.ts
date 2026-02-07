@@ -2,10 +2,10 @@ import type {
   ChannelDirectoryEntry,
   ChannelPlugin,
   ChannelSetupInput,
-  ClawdbotConfig,
   ChannelLogSink,
   RuntimeEnv,
-} from "clawdbot/plugin-sdk";
+} from "openclaw/plugin-sdk";
+import type { OpenClawConfig } from "openclaw/plugin-sdk";
 import {
   applyAccountNameToChannelSection,
   buildChannelConfigSchema,
@@ -16,9 +16,9 @@ import {
   normalizeAccountId,
   PAIRING_APPROVED_MESSAGE,
   setAccountEnabledInConfigSection,
-} from "clawdbot/plugin-sdk";
-
+} from "openclaw/plugin-sdk";
 import type { Ob11Client } from "./adapter.js";
+import type { OB11ActionResponse, QQConnectionConfig, ResolvedQQAccount } from "./types.js";
 import { clearActiveQqClient, getActiveQqClient, startQqClient } from "./adapter.js";
 import { QQConfigSchema } from "./config-schema.js";
 import {
@@ -30,10 +30,10 @@ import {
 } from "./config.js";
 import { handleOb11Event } from "./inbound.js";
 import { qqOutbound } from "./outbound.js";
-import { sendOb11Message } from "./send.js";
+import { setQqRuntime } from "./runtime.js";
 import { rememberSelfSentResponse } from "./self-sent.js";
+import { sendOb11Message } from "./send.js";
 import { formatQqTarget, normalizeAllowEntry, parseQqTarget } from "./targets.js";
-import type { OB11ActionResponse, QQConnectionConfig, ResolvedQQAccount } from "./types.js";
 
 const CHANNEL_ID = "qq";
 
@@ -145,10 +145,10 @@ function parseConnectionInput(input: ChannelSetupInput): {
 }
 
 function applyConnectionConfig(params: {
-  cfg: ClawdbotConfig;
+  cfg: OpenClawConfig;
   accountId: string;
   connection: QQConnectionConfig;
-}): ClawdbotConfig {
+}): OpenClawConfig {
   const accountId = normalizeAccountId(params.accountId);
   const channels = params.cfg.channels ?? {};
   const base = (channels.qq ?? {}) as Record<string, unknown>;
@@ -157,9 +157,7 @@ function applyConnectionConfig(params: {
       ? (base.accounts as Record<string, Record<string, unknown>>)
       : undefined;
   const useAccounts = accountId !== DEFAULT_ACCOUNT_ID || Boolean(baseAccounts);
-  const baseConfig = useAccounts
-    ? (({ connection: _ignored, ...rest }) => rest)(base)
-    : base;
+  const baseConfig = useAccounts ? (({ connection: _ignored, ...rest }) => rest)(base) : base;
 
   if (!useAccounts) {
     return {
@@ -172,7 +170,7 @@ function applyConnectionConfig(params: {
           connection: params.connection,
         },
       },
-    } as ClawdbotConfig;
+    } as OpenClawConfig;
   }
 
   const accounts = { ...(baseAccounts ?? {}) };
@@ -194,21 +192,18 @@ function applyConnectionConfig(params: {
         },
       },
     },
-  } as ClawdbotConfig;
+  } as OpenClawConfig;
 }
 
-function resolveOutboundAccountId(
-  cfg: ClawdbotConfig,
-  accountId?: string | null,
-): string {
+function resolveOutboundAccountId(cfg: OpenClawConfig, accountId?: string | null): string {
   if (accountId?.trim()) return accountId.trim();
   return resolveDefaultQqAccountId(cfg);
 }
 
-function requireActiveClient(params: {
-  cfg: ClawdbotConfig;
-  accountId?: string | null;
-}): { accountId: string; client: Ob11Client } {
+function requireActiveClient(params: { cfg: OpenClawConfig; accountId?: string | null }): {
+  accountId: string;
+  client: Ob11Client;
+} {
   const accountId = resolveOutboundAccountId(params.cfg, params.accountId);
   const client = getActiveQqClient(accountId);
   if (!client) {
@@ -306,9 +301,7 @@ export const qqPlugin: ChannelPlugin<ResolvedQQAccount> = {
       baseUrl: resolveConnectionBaseUrl(account.connection),
     }),
     resolveAllowFrom: ({ cfg, accountId }) =>
-      (resolveQqAccount({ cfg, accountId }).config.allowFrom ?? []).map((entry) =>
-        String(entry),
-      ),
+      (resolveQqAccount({ cfg, accountId }).config.allowFrom ?? []).map((entry) => String(entry)),
     formatAllowFrom: ({ allowFrom }) =>
       allowFrom
         .map((entry) => String(entry).trim())
@@ -318,7 +311,8 @@ export const qqPlugin: ChannelPlugin<ResolvedQQAccount> = {
   security: {
     resolveDmPolicy: ({ cfg, accountId, account }) => {
       const resolvedAccountId = accountId ?? account.accountId ?? DEFAULT_ACCOUNT_ID;
-      const useAccountPath = Boolean(cfg.channels?.qq?.accounts?.[resolvedAccountId]);
+      const qqConfig = cfg.channels?.qq as Record<string, unknown> | undefined;
+      const useAccountPath = Boolean(qqConfig?.accounts?.[resolvedAccountId]);
       const basePath = useAccountPath
         ? `channels.qq.accounts.${resolvedAccountId}.`
         : "channels.qq.";
@@ -453,8 +447,7 @@ export const qqPlugin: ChannelPlugin<ResolvedQQAccount> = {
         .filter((entry) => {
           if (!q) return true;
           return (
-            entry.id.toLowerCase().includes(q) ||
-            (entry.name?.toLowerCase().includes(q) ?? false)
+            entry.id.toLowerCase().includes(q) || (entry.name?.toLowerCase().includes(q) ?? false)
           );
         });
       if (limit && limit > 0) return entries.slice(0, limit);
@@ -485,8 +478,7 @@ export const qqPlugin: ChannelPlugin<ResolvedQQAccount> = {
         .filter((entry) => {
           if (!q) return true;
           return (
-            entry.id.toLowerCase().includes(q) ||
-            (entry.name?.toLowerCase().includes(q) ?? false)
+            entry.id.toLowerCase().includes(q) || (entry.name?.toLowerCase().includes(q) ?? false)
           );
         });
       if (limit && limit > 0) return entries.slice(0, limit);
@@ -533,13 +525,19 @@ export const qqPlugin: ChannelPlugin<ResolvedQQAccount> = {
       });
     },
   },
-  gateway: {
+    gateway: {
     startAccount: async (ctx) => {
       const account = ctx.account;
       const connection = account.connection;
       if (!connection) {
         throw new Error("QQ connection not configured");
       }
+
+      console.error(`[DEBUG] startAccount: ctx.runtime type=${typeof ctx.runtime}`);
+      console.error(`[DEBUG] startAccount: ctx.runtime=${ctx.runtime ? JSON.stringify(Object.keys(ctx.runtime)) : 'null'}`);
+
+      // NOTE: Runtime is already set during register() via setQqRuntime(api.runtime)
+      // ctx.runtime is RuntimeEnv (log, error, exit only), not the full PluginRuntime
 
       const logger = resolveLogger(ctx.runtime, ctx.log);
 
@@ -561,7 +559,6 @@ export const qqPlugin: ChannelPlugin<ResolvedQQAccount> = {
       ctx.log?.info(
         `[${account.accountId}] QQ client connected (${resolveConnectionBaseUrl(connection) ?? connection.type})`,
       );
-
     },
     stopAccount: async ({ cfg, accountId }) => {
       const resolvedAccountId = resolveOutboundAccountId(cfg, accountId);
