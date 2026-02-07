@@ -1,34 +1,34 @@
 # moltbot_qq
 
-QQ channel plugin for OpenClaw via OneBot 11.
+基于 OneBot 11 的 QQ 频道插件，适用于 OpenClaw。
 
-## Installation
+## 安装
 
-### Prerequisites
+### 前置条件
 
-- OneBot 11 backend running (e.g., LLOneBot/napcat/go-cqhttp)
-- OpenClaw installed and configured
+- 已启动 OneBot 11 后端（如 LLOneBot / napcat / go-cqhttp）
+- 已安装并配置 OpenClaw
 
-### Quick Start
+### 快速开始
 
 ```bash
-# Clone and install dependencies
+# 克隆并安装依赖
 cd moltbot_qq
 pnpm install
 
-# Link to OpenClaw (run from OpenClaw root directory)
+# 链接到 OpenClaw（在 OpenClaw 根目录运行）
 cd /path/to/openclaw
 pnpm install --filter ./extensions/qq
 
-# Restart Gateway
+# 重启 Gateway
 openclaw gateway restart
 ```
 
-## OpenClaw Configuration
+## OpenClaw 配置
 
-Default config file: `~/.openclaw/openclaw.json`
+默认配置文件：`~/.openclaw/openclaw.json`
 
-### Minimal Config (Single Account)
+### 最小配置（单账号）
 
 ```json
 {
@@ -47,7 +47,7 @@ Default config file: `~/.openclaw/openclaw.json`
 }
 ```
 
-### Multi-Account Config
+### 多账号配置
 
 ```json
 {
@@ -62,7 +62,7 @@ Default config file: `~/.openclaw/openclaw.json`
             "type": "ws",
             "host": "127.0.0.1",
             "port": 3001,
-            "token": "optional-token"
+            "token": "可选的token"
           }
         }
       }
@@ -71,66 +71,67 @@ Default config file: `~/.openclaw/openclaw.json`
 }
 ```
 
-### Connection Options
+### 连接选项
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `connection.type` | `ws` or `http` | `ws` |
-| `connection.host` | OneBot 11 backend host | - |
-| `connection.port` | OneBot 11 backend port | - |
-| `connection.token` | Authentication token (optional) | - |
-| `connection.messageFormat` | `array` or `string` | `array` |
-| `connection.reportSelfMessage` | Handle `message_sent` events | `false` |
+| 选项 | 说明 | 默认值 |
+|------|------|--------|
+| `connection.type` | `ws` 或 `http` | `ws` |
+| `connection.host` | OneBot 11 后端地址 | - |
+| `connection.port` | OneBot 11 后端端口 | - |
+| `connection.token` | 认证 token（可选） | - |
+| `connection.messageFormat` | `array` 或 `string` | `array` |
+| `connection.reportSelfMessage` | 是否处理 `message_sent` 事件 | `false` |
 
-### Security Policies
+### 安全策略
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `dmPolicy` | `pairing`, `allowlist`, `open`, `disabled` | `pairing` |
-| `allowFrom` | DM allowlist (user IDs) | - |
-| `groupPolicy` | `allowlist`, `open`, `disabled` | `allowlist` |
-| `groupAllowFrom` | Group allowlist (`group:<id>`) | - |
-| `requireMention` | Require @mention in groups | `true` |
+| 选项 | 说明 | 默认值 |
+|------|------|--------|
+| `dmPolicy` | `pairing`、`allowlist`、`open`、`disabled` | `pairing` |
+| `allowFrom` | 私聊白名单（用户 ID） | - |
+| `groupPolicy` | `allowlist`、`open`、`disabled` | `allowlist` |
+| `groupAllowFrom` | 群聊白名单（`group:<id>`） | - |
+| `requireMention` | 群聊是否需要 @ 机器人 | `true` |
 
-## Supported Features
+## 支持的功能
 
-- ✅ Private messages
-- ✅ Group messages
-- ✅ CQ code parsing
-- ✅ Message segments
-- ✅ Pairing mode
-- ✅ Allowlist filtering
+- ✅ 私聊消息
+- ✅ 群聊消息
+- ✅ CQ 码解析
+- ✅ 消息段支持
+- ✅ 图片/语音/视频识别
+- ✅ 配对模式
+- ✅ 白名单过滤
 
-## Architecture
+## 目录结构
 
 ```
 .
-├── index.ts              # Plugin entry point
-├── package.json          # Package metadata
-├── README.md             # This file
+├── index.ts              # 插件入口
+├── package.json          # 包元数据
+├── README.md             # 本文档
 └── src/
-    ├── channel.ts        # ChannelPlugin definition
-    ├── runtime.ts         # Runtime initialization
-    ├── types.ts          # Type definitions
-    ├── config.ts         # Configuration parsing
+    ├── channel.ts        # ChannelPlugin 定义
+    ├── runtime.ts        # 运行时初始化
+    ├── types.ts          # 类型定义
+    ├── config.ts         # 配置解析
     ├── config-schema.ts  # Zod schema
-    ├── adapter.ts        # OneBot 11 client (ws/http)
-    ├── inbound.ts        # Inbound message handling
-    ├── outbound.ts       # Outbound message handling
-    ├── send.ts           # OB11 send helpers
-    ├── cqcode.ts         # CQ code encoding/decoding
-    ├── message-utils.ts  # OB11 message utilities
-    ├── targets.ts        # Target parsing
-    └── self-sent.ts      # Self-sent message detection
+    ├── adapter.ts        # OneBot 11 客户端 (ws/http)
+    ├── inbound.ts        # 入站消息处理
+    ├── outbound.ts       # 出站消息处理
+    ├── send.ts           # OB11 发送助手
+    ├── cqcode.ts         # CQ 码编解码
+    ├── message-utils.ts  # OB11 消息工具
+    ├── targets.ts        # 目标解析
+    └── self-sent.ts      # 自发消息检测
 ```
 
-## References
+## 相关链接
 
-- OneBot 11 Spec: https://github.com/botuniverse/onebot-11
-- LLOneBot: https://github.com/LLOneBot/LLOneBot
-- napcat: https://github.com/Mrs4s/napcat
-- OpenClaw Docs: https://docs.openclaw.ai/channels/qq
+- OneBot 11 规范：https://github.com/botuniverse/onebot-11
+- LLOneBot：https://github.com/LLOneBot/LLOneBot
+- napcat：https://github.com/Mrs4s/napcat
+- OpenClaw 文档：https://docs.openclaw.ai/channels/qq
 
-## License
+## 开源协议
 
 MIT
