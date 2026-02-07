@@ -278,6 +278,40 @@ export async function handleOb11Event(params: {
       sessionKey: route.sessionKey,
     }) ?? Date.now();
 
+    // Extract media URLs from message segments
+    let mediaInfo = "";
+    const mediaUrls: string[] = [];
+    if (event.message && Array.isArray(event.message)) {
+      for (const seg of event.message) {
+        if (seg.type === "image") {
+          const url = seg.data?.url || seg.data?.file;
+          if (url) {
+            mediaUrls.push(url);
+            mediaInfo += `[Image: ${url}]\n`;
+          }
+        }
+        if (seg.type === "video") {
+          const url = seg.data?.url || seg.data?.file;
+          if (url) {
+            mediaUrls.push(url);
+            mediaInfo += `[Video: ${url}]\n`;
+          }
+        }
+        if (seg.type === "record") {
+          const url = seg.data?.url || seg.data?.file;
+          if (url) {
+            mediaUrls.push(url);
+            mediaInfo += `[Voice: ${url}]\n`;
+          }
+        }
+      }
+    }
+    console.error(`[DEBUG] handleOb11Event: mediaUrls=${JSON.stringify(mediaUrls)}`);
+
+    // Combine text body with media info
+    const fullBody = rawBody ? (rawBody + "\n" + mediaInfo).trim() : mediaInfo.trim();
+    console.error(`[DEBUG] handleOb11Event: fullBody="${fullBody.substring(0, 100)}..."`);
+
     const body = core.channel?.reply?.formatAgentEnvelope({
       channel: "QQ",
       from: fromLabel,
@@ -289,9 +323,9 @@ export async function handleOb11Event(params: {
 
     console.error(`[DEBUG] handleOb11Event: calling finalizeInboundContext`);
     const ctxPayload = core.channel?.reply?.finalizeInboundContext({
-      Body: body,
-      RawBody: rawBody,
-      CommandBody: rawBody,
+      Body: fullBody,
+      RawBody: fullBody,
+      CommandBody: fullBody,
       From: isGroup ? `qq:group:${groupId ?? ""}` : `qq:${senderId}`,
       To: `qq:${formatQqTarget(target)}`,
       SessionKey: route.sessionKey,
@@ -309,6 +343,7 @@ export async function handleOb11Event(params: {
       OriginatingChannel: CHANNEL_ID,
       OriginatingTo: `qq:${formatQqTarget(target)}`,
       CommandAuthorized: commandAuthorized,
+      MediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
     });
     console.error(`[DEBUG] handleOb11Event: ctxPayload=${ctxPayload ? 'defined' : 'undefined'}`);
 
