@@ -59,12 +59,10 @@ export async function handleOb11Event(params: {
   statusSink?: StatusSink;
 }): Promise<void> {
   const { event, account, config, runtime, statusSink } = params;
-  console.error(`[DEBUG] handleOb11Event: post_type=${event.post_type}, message_type=${event.message_type}, user_id=${event.user_id}`);
 
   try {
     const postType = String(event.post_type ?? "").toLowerCase();
     if (postType !== "message" && postType !== "message_sent") {
-      console.error(`[DEBUG] handleOb11Event: rejected - not a message event`);
       return;
     }
 
@@ -72,19 +70,16 @@ export async function handleOb11Event(params: {
     const isGroup = messageType === "group";
     const senderId = event.user_id != null ? String(event.user_id) : "";
     if (!senderId) {
-      console.error(`[DEBUG] handleOb11Event: rejected - no senderId`);
       return;
     }
 
     const groupId = event.group_id != null ? String(event.group_id) : undefined;
     const target = buildTarget({ isGroup, senderId, groupId });
     if (!target) {
-      console.error(`[DEBUG] handleOb11Event: rejected - no target`);
       return;
     }
 
     if (postType === "message_sent" && !account.connection?.reportSelfMessage) {
-      console.error(`[DEBUG] handleOb11Event: rejected - message_sent without reportSelfMessage`);
       return;
     }
     const parsed = parseOb11Message(event.message ?? event.raw_message);
@@ -97,10 +92,8 @@ export async function handleOb11Event(params: {
       : false;
 
     if (!hasTextContent && !hasMediaContent) {
-      console.error(`[DEBUG] handleOb11Event: rejected - empty message body`);
       return;
     }
-    console.error(`[DEBUG] handleOb11Event: message body="${rawBody}", hasMedia=${hasMediaContent}`);
 
     if (postType === "message_sent") {
       const messageId = event.message_id != null ? String(event.message_id) : undefined;
@@ -112,19 +105,14 @@ export async function handleOb11Event(params: {
           text: rawBody,
         })
       ) {
-        console.error(`[DEBUG] handleOb11Event: rejected - self-sent message`);
         return;
       }
     }
 
     const core = getQqRuntime();
-    console.error(`[DEBUG] handleOb11Event: core=${core ? JSON.stringify(Object.keys(core)) : 'null'}`);
     if (!core) {
-      console.error(`[DEBUG] handleOb11Event: rejected - no runtime core`);
       return;
     }
-    console.error(`[DEBUG] handleOb11Event: runtime core found`);
-    console.error(`[DEBUG] handleOb11Event: core.channel exists=${!!core.channel}`);
 
     const selfId = event.self_id != null ? String(event.self_id) : undefined;
     const wasMentioned = isGroup ? hasSelfMention(parsed.mentions, selfId) : false;
@@ -144,7 +132,6 @@ export async function handleOb11Event(params: {
     const effectiveAllowFrom = normalizeAllowList(
       mergeAllowlist({ existing: account.config.allowFrom, additions: storeAllowFrom }),
     );
-    console.error(`[DEBUG] handleOb11Event: dmPolicy=${dmPolicy}, effectiveAllowFrom.list=${JSON.stringify(effectiveAllowFrom.list)}, isGroup=${isGroup}`);
 
     const allowTextCommands = core.channel?.commands?.shouldHandleTextCommands({
       cfg: config as OpenClawConfig,
@@ -206,16 +193,12 @@ export async function handleOb11Event(params: {
         return;
       }
     } else {
-      console.error(`[DEBUG] handleOb11Event: checking DM policy for sender=${senderId}`);
       if (dmPolicy === "disabled") {
-        console.error(`[DEBUG] handleOb11Event: rejected - dmPolicy=disabled`);
         runtime.log?.(`qq: drop DM sender=${senderId} (dmPolicy=disabled)`);
         return;
       }
       const senderAllowed = isAllowed(effectiveAllowFrom, senderId);
-      console.error(`[DEBUG] handleOb11Event: dmPolicy=${dmPolicy}, senderAllowed=${senderAllowed}`);
       if (dmPolicy !== "open" && !senderAllowed) {
-        console.error(`[DEBUG] handleOb11Event: sender not in allowlist, attempting pairing`);
         if (dmPolicy === "pairing" && core.channel?.pairing) {
           const { code, created } = await core.channel.pairing.upsertPairingRequest({
             channel: CHANNEL_ID,
@@ -243,14 +226,12 @@ export async function handleOb11Event(params: {
                   text: pairingText,
                 });
                 statusSink?.({ lastOutboundAt: Date.now() });
-                console.error(`[DEBUG] handleOb11Event: pairing reply sent`);
               }
             } catch (err) {
               runtime.error?.(`qq: pairing reply failed for ${senderId}: ${String(err)}`);
             }
           }
         }
-        console.error(`[DEBUG] handleOb11Event: rejected - sender not in allowlist`);
         runtime.log?.(`qq: drop DM sender=${senderId} (dmPolicy=${dmPolicy})`);
         return;
       }
@@ -306,11 +287,9 @@ export async function handleOb11Event(params: {
         }
       }
     }
-    console.error(`[DEBUG] handleOb11Event: mediaUrls=${JSON.stringify(mediaUrls)}`);
 
     // Combine text body with media info
     const fullBody = rawBody ? (rawBody + "\n" + mediaInfo).trim() : mediaInfo.trim();
-    console.error(`[DEBUG] handleOb11Event: fullBody="${fullBody.substring(0, 100)}..."`);
 
     const body = core.channel?.reply?.formatAgentEnvelope({
       channel: "QQ",
@@ -321,7 +300,6 @@ export async function handleOb11Event(params: {
       body: rawBody,
     }) ?? rawBody;
 
-    console.error(`[DEBUG] handleOb11Event: calling finalizeInboundContext`);
     const ctxPayload = core.channel?.reply?.finalizeInboundContext({
       Body: fullBody,
       RawBody: fullBody,
@@ -345,10 +323,8 @@ export async function handleOb11Event(params: {
       CommandAuthorized: commandAuthorized,
       MediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
     });
-    console.error(`[DEBUG] handleOb11Event: ctxPayload=${ctxPayload ? 'defined' : 'undefined'}`);
 
     if (!ctxPayload) {
-      console.error(`[DEBUG] handleOb11Event: rejected - no ctxPayload`);
       return;
     }
 
@@ -360,14 +336,12 @@ export async function handleOb11Event(params: {
         runtime.error?.(`qq: failed updating session meta: ${String(err)}`);
       },
     });
-    console.error(`[DEBUG] handleOb11Event: calling dispatchReplyWithBufferedBlockDispatcher`);
 
     await core.channel?.reply?.dispatchReplyWithBufferedBlockDispatcher({
       ctx: ctxPayload,
       cfg: config as OpenClawConfig,
       dispatcherOptions: {
         deliver: async (payload) => {
-          console.error(`[DEBUG] handleOb11Event: deliver callback called, text=${payload.text?.substring(0, 50)}`);
           try {
             const mediaUrl = payload.mediaUrl ?? payload.mediaUrls?.[0];
             const client = getActiveQqClient(account.accountId);
@@ -388,23 +362,18 @@ export async function handleOb11Event(params: {
               text: payload.text ?? "",
             });
             statusSink?.({ lastOutboundAt: Date.now() });
-            console.error(`[DEBUG] handleOb11Event: message sent successfully`);
           } catch (err) {
-            console.error(`[DEBUG] handleOb11Event: deliver error=${String(err)}`);
             throw err;
           }
         },
         onError: (err, info) => {
-          console.error(`[DEBUG] handleOb11Event: dispatchReply error=${String(err)}, kind=${info.kind}`);
           runtime.error?.(`qq ${info.kind} reply failed: ${String(err)}`);
         },
       },
     }).catch((err) => {
-      console.error(`[DEBUG] handleOb11Event: dispatchReplyWithBufferedBlockDispatcher exception=${String(err)}`);
       runtime.error?.(`qq dispatch exception: ${String(err)}`);
     });
   } catch (err) {
     runtime.error?.(`qq handleOb11Event error: ${String(err)}`);
-    console.error(`[DEBUG] handleOb11Event: error=${String(err)}`);
   }
 }

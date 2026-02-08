@@ -6,9 +6,21 @@
   "devDependencies": {
     "openclaw": "workspace:*"
   },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
   "openclaw": {
     "extensions": [
       "./index.ts"
-    ]
+    ],
+    "channel": {
+      "id": "qq",
+      "label": "QQ",
+      "selectionLabel": "QQ (OneBot 11)",
+      "docsPath": "/channels/qq",
+      "blurb": "QQ via OneBot 11 (LLOneBot/napcat)",
+      "order": 90,
+      "aliases": ["onebot"]
+    }
   }
 }

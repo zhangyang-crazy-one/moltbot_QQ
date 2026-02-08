@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+
 import type {
   OB11ActionResponse,
   OB11Event,
@@ -68,7 +69,12 @@ export async function startQqClient(params: {
   return client;
 }
 
-function buildWsUrl(params: { host: string; port: number; path: string; token?: string }): string {
+function buildWsUrl(params: {
+  host: string;
+  port: number;
+  path: string;
+  token?: string;
+}): string {
   const base = `ws://${params.host}:${params.port}${params.path}`;
   if (!params.token) return base;
   const url = new URL(base);
@@ -278,11 +284,7 @@ class Ob11WsClient implements Ob11Client {
       this.params.log.warn(`QQ event parse failed: ${String(err)}`);
       return;
     }
-    try {
-      this.params.onEvent(event);
-    } catch (err) {
-      this.params.log.error(`QQ event dispatch failed: ${String(err)}`);
-    }
+    this.params.onEvent(event);
   }
 }
 

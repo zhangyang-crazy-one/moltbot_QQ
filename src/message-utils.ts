@@ -43,6 +43,39 @@ function renderOb11Segments(segments: OB11MessageSegment[]): ParsedMessage {
       }
       continue;
     }
+    if (segment.type === "forward") {
+      const id = toSegmentString(segment.data.id);
+      if (id) {
+        parts.push(`[Forward Message: ${id}]`);
+      }
+      continue;
+    }
+    if (segment.type === "face") {
+      const id = toSegmentString(segment.data.id);
+      parts.push(`[Face:${id}]`);
+      continue;
+    }
+    if (segment.type === "poke") {
+      const pokeType = toSegmentString(segment.data.type);
+      const pokeId = toSegmentString(segment.data.id);
+      parts.push(`[Poke:${pokeType}:${pokeId}]`);
+      continue;
+    }
+    if (segment.type === "json") {
+      parts.push(`[JSON Card]`);
+      continue;
+    }
+    if (segment.type === "xml") {
+      parts.push(`[XML Card]`);
+      continue;
+    }
+    if (segment.type === "file") {
+      const name = toSegmentString(segment.data.name) || toSegmentString(segment.data.file);
+      if (name) {
+        parts.push(`[File: ${name}]`);
+      }
+      continue;
+    }
   }
 
   return {

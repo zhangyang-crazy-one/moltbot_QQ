@@ -2,14 +2,11 @@ import type { Ob11Client } from "./adapter.js";
 import type { QQTarget } from "./targets.js";
 import type { QQMessageFormat, OB11ActionResponse, OB11MessageSegment } from "./types.js";
 import { buildCqMessage } from "./cqcode.js";
-import { readFileSync, existsSync } from "fs";
 
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"]);
 const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".ogg", ".flac", ".silk", ".m4a"]);
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".webm", ".mkv", ".avi"]);
-
-// OneBot 11 文件大小限制 (建议)
-const FILE_SIZE_LIMIT = 50 * 1024 * 1024; // 50MB
+const FILE_EXTENSIONS = new Set([".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".zip", ".rar", ".7z", ".tar", ".gz", ".txt", ".csv", ".json"]);
 
 function getExtension(url: string): string {
   const lower = url.toLowerCase();
@@ -21,26 +18,15 @@ function getExtension(url: string): string {
 
 function guessMediaType(path: string): "image" | "record" | "video" | "file" {
   const ext = getExtension(path);
-  const imageExt = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"]);
-  const audioExt = new Set([".mp3", ".wav", ".ogg", ".flac", ".silk", ".m4a"]);
-  const videoExt = new Set([".mp4", ".mov", ".webm", ".mkv", ".avi"]);
-  
-  if (audioExt.has(ext)) return "record";
-  if (videoExt.has(ext)) return "video";
-  if (imageExt.has(ext)) return "image";
-  return "file";
+  if (AUDIO_EXTENSIONS.has(ext)) return "record";
+  if (VIDEO_EXTENSIONS.has(ext)) return "video";
+  if (FILE_EXTENSIONS.has(ext)) return "file";
+  if (IMAGE_EXTENSIONS.has(ext)) return "image";
+  return "image";
 }
 
 function isLocalPath(path: string): boolean {
   return path.startsWith("/") || path.startsWith("./") || path.startsWith("../");
-}
-
-function getFileSize(filePath: string): number {
-  try {
-    return readFileSync(filePath).length;
-  } catch {
-    return 0;
-  }
 }
 
 export function buildOb11MessagePayload(params: {
@@ -86,22 +72,16 @@ export async function sendOb11Message(params: {
 }): Promise<OB11ActionResponse> {
   // 处理本地文件 - 使用 CQ码 方式发送
   if (params.mediaUrl && isLocalPath(params.mediaUrl)) {
-    console.error(`[DEBUG] Processing local file: ${params.mediaUrl}`);
-    
     const fileName = params.mediaUrl.split("/").pop() || "file";
     const mediaType = guessMediaType(params.mediaUrl);
-    
+
     // 使用 CQ码 方式发送本地文件
-    // image 类型使用 file 字段
-    // 其他类型（record/video）也使用 file 字段
     const cqCode = `[CQ:${mediaType},file=${params.mediaUrl}]`;
-    
-    const fullMessage = params.text 
+
+    const fullMessage = params.text
       ? `${params.text}\n${cqCode}`
       : cqCode;
-    
-    console.error(`[DEBUG] Sending file via CQ code: ${cqCode}`);
-    
+
     if (params.target.kind === "group") {
       return params.client.sendAction("send_group_msg", {
         group_id: params.target.id,
@@ -122,8 +102,6 @@ export async function sendOb11Message(params: {
     replyToId: params.replyToId,
     mediaUrl: params.mediaUrl,
   });
-
-  console.error(`[DEBUG] Sending OB11 message: ${JSON.stringify(payload)}`);
 
   if (params.target.kind === "group") {
     return params.client.sendAction("send_group_msg", {
