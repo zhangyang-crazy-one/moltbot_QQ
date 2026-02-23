@@ -110,9 +110,6 @@ export async function handleOb11Event(params: {
     }
 
     const core = getQqRuntime();
-    if (!core) {
-      return;
-    }
 
     const selfId = event.self_id != null ? String(event.self_id) : undefined;
     const wasMentioned = isGroup ? hasSelfMention(parsed.mentions, selfId) : false;
@@ -301,7 +298,8 @@ export async function handleOb11Event(params: {
     }) ?? rawBody;
 
     const ctxPayload = core.channel?.reply?.finalizeInboundContext({
-      Body: fullBody,
+      Body: body,
+      BodyForAgent: fullBody,
       RawBody: fullBody,
       CommandBody: fullBody,
       From: isGroup ? `qq:group:${groupId ?? ""}` : `qq:${senderId}`,

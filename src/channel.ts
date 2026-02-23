@@ -30,6 +30,7 @@ import {
 } from "./config.js";
 import { handleOb11Event } from "./inbound.js";
 import { qqOutbound } from "./outbound.js";
+import { qqMessageActions } from "./actions.js";
 import { setQqRuntime } from "./runtime.js";
 import { rememberSelfSentResponse } from "./self-sent.js";
 import { sendOb11Message } from "./send.js";
@@ -254,9 +255,10 @@ export const qqPlugin: ChannelPlugin<ResolvedQQAccount> = {
     chatTypes: ["direct", "group"],
     media: true,
     polls: false,
-    reactions: false,
+    reactions: true,
     threads: false,
     nativeCommands: false,
+    groupManagement: true,
     blockStreaming: true,
   },
   reload: { configPrefixes: ["channels.qq"] },
@@ -358,6 +360,7 @@ export const qqPlugin: ChannelPlugin<ResolvedQQAccount> = {
     },
   },
   outbound: qqOutbound,
+  actions: qqMessageActions,
   status: {
     defaultRuntime: {
       accountId: DEFAULT_ACCOUNT_ID,

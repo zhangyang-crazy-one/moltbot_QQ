@@ -102,7 +102,7 @@ async function sendMessage(params: {
     mediaUrl: params.mediaUrl,
   });
   rememberSelfSentResponse({
-    accountId: resolvedAccountId,
+    accountId: account.accountId,
     response,
     target: formatQqTarget(targetResult.target),
     text,
@@ -119,9 +119,7 @@ async function sendMessage(params: {
 export const qqOutbound: ChannelOutboundAdapter = {
   deliveryMode: "gateway",
   chunker: (text, limit) => {
-    const runtime = getQqRuntime();
-    if (!runtime) return [text];
-    return runtime.channel.text.chunkMarkdownText(text, limit);
+    return getQqRuntime().channel.text.chunkMarkdownText(text, limit);
   },
   chunkerMode: "markdown",
   textChunkLimit: 2000,
@@ -133,16 +131,159 @@ export const qqOutbound: ChannelOutboundAdapter = {
   sendText: async (ctx) => sendMessage({ ctx }),
   sendMedia: async (ctx) => sendMessage({ ctx, mediaUrl: ctx.mediaUrl }),
   deleteMessage: async (ctx) => {
-    const { cfg, accountId, messageId } = ctx;
-    const resolvedAccountId = accountId ?? resolveDefaultQqAccountId(cfg);
-    const client = getActiveQqClient(resolvedAccountId);
-    if (!client) {
-      throw new Error(`QQ client not running for account ${resolvedAccountId}`);
-    }
-    const response = await client.sendAction("delete_msg", { message_id: messageId });
-    if (response.status !== "ok" && response.retcode !== 0) {
-      throw new Error(response.msg ?? `Failed to delete message: retcode=${response.retcode}`);
-    }
+    await deleteQqMessage({
+      cfg: ctx.cfg,
+      accountId: ctx.accountId ?? undefined,
+      messageId: ctx.messageId,
+    });
     return { success: true };
   },
 };
+
+export async function deleteQqMessage(params: {
+  cfg: { channels?: { qq?: unknown } };
+  accountId?: string;
+  messageId: string | number;
+}): Promise<void> {
+  const resolvedAccountId =
+    params.accountId ?? resolveDefaultQqAccountId(params.cfg as Parameters<typeof resolveDefaultQqAccountId>[0]);
+  const client = getActiveQqClient(resolvedAccountId);
+  if (!client) {
+    throw new Error(`QQ client not running for account ${resolvedAccountId}`);
+  }
+  const response = await client.sendAction("delete_msg", { message_id: params.messageId });
+  if (response.status !== "ok" && response.retcode !== 0) {
+    throw new Error(response.msg ?? `Failed to delete message: retcode=${response.retcode}`);
+  }
+}
+
+// Group management functions
+
+export async function muteUser(params: {
+  cfg: { channels?: { qq?: unknown } };
+  accountId?: string;
+  groupId: string;
+  userId: string;
+  duration: number; // seconds, 0 = unmute
+}): Promise<void> {
+  const resolvedAccountId = params.accountId ?? resolveDefaultQqAccountId(params.cfg as Parameters<typeof resolveDefaultQqAccountId>[0]);
+  const client = getActiveQqClient(resolvedAccountId);
+  if (!client) {
+    throw new Error(`QQ client not running for account ${resolvedAccountId}`);
+  }
+  const response = await client.sendAction("set_group_ban", {
+    group_id: Number(params.groupId),
+    user_id: Number(params.userId),
+    duration: params.duration,
+  });
+  if (response.status !== "ok" && response.retcode !== 0) {
+    throw new Error(response.msg ?? `Failed to mute user: retcode=${response.retcode}`);
+  }
+}
+
+export async function kickUser(params: {
+  cfg: { channels?: { qq?: unknown } };
+  accountId?: string;
+  groupId: string;
+  userId: string;
+  rejectAdd?: boolean;
+}): Promise<void> {
+  const resolvedAccountId = params.accountId ?? resolveDefaultQqAccountId(params.cfg as Parameters<typeof resolveDefaultQqAccountId>[0]);
+  const client = getActiveQqClient(resolvedAccountId);
+  if (!client) {
+    throw new Error(`QQ client not running for account ${resolvedAccountId}`);
+  }
+  const response = await client.sendAction("set_group_kick", {
+    group_id: Number(params.groupId),
+    user_id: Number(params.userId),
+    reject_add_request: params.rejectAdd ?? false,
+  });
+  if (response.status !== "ok" && response.retcode !== 0) {
+    throw new Error(response.msg ?? `Failed to kick user: retcode=${response.retcode}`);
+  }
+}
+
+export async function setGroupCard(params: {
+  cfg: { channels?: { qq?: unknown } };
+  accountId?: string;
+  groupId: string;
+  userId: string;
+  card: string;
+}): Promise<void> {
+  const resolvedAccountId = params.accountId ?? resolveDefaultQqAccountId(params.cfg as Parameters<typeof resolveDefaultQqAccountId>[0]);
+  const client = getActiveQqClient(resolvedAccountId);
+  if (!client) {
+    throw new Error(`QQ client not running for account ${resolvedAccountId}`);
+  }
+  const response = await client.sendAction("set_group_card", {
+    group_id: Number(params.groupId),
+    user_id: Number(params.userId),
+    card: params.card,
+  });
+  if (response.status !== "ok" && response.retcode !== 0) {
+    throw new Error(response.msg ?? `Failed to set group card: retcode=${response.retcode}`);
+  }
+}
+
+export async function setGroupWholeBan(params: {
+  cfg: { channels?: { qq?: unknown } };
+  accountId?: string;
+  groupId: string;
+  enable: boolean;
+}): Promise<void> {
+  const resolvedAccountId = params.accountId ?? resolveDefaultQqAccountId(params.cfg as Parameters<typeof resolveDefaultQqAccountId>[0]);
+  const client = getActiveQqClient(resolvedAccountId);
+  if (!client) {
+    throw new Error(`QQ client not running for account ${resolvedAccountId}`);
+  }
+  const response = await client.sendAction("set_group_whole_ban", {
+    group_id: Number(params.groupId),
+    enable: params.enable,
+  });
+  if (response.status !== "ok" && response.retcode !== 0) {
+    throw new Error(response.msg ?? `Failed to set whole group ban: retcode=${response.retcode}`);
+  }
+}
+
+// Reactions support (requires napcat/LLOneBot extended API)
+
+export async function addReaction(params: {
+  cfg: { channels?: { qq?: unknown } };
+  accountId?: string;
+  messageId: string;
+  emojiId: string;
+}): Promise<void> {
+  const resolvedAccountId = params.accountId ?? resolveDefaultQqAccountId(params.cfg as Parameters<typeof resolveDefaultQqAccountId>[0]);
+  const client = getActiveQqClient(resolvedAccountId);
+  if (!client) {
+    throw new Error(`QQ client not running for account ${resolvedAccountId}`);
+  }
+  const response = await client.sendAction("set_msg_emoji_like", {
+    message_id: Number(params.messageId),
+    emoji_id: params.emojiId,
+  });
+  if (response.status !== "ok" && response.retcode !== 0) {
+    throw new Error(response.msg ?? `Failed to add reaction: retcode=${response.retcode}`);
+  }
+}
+
+export async function removeReaction(params: {
+  cfg: { channels?: { qq?: unknown } };
+  accountId?: string;
+  messageId: string;
+  emojiId: string;
+}): Promise<void> {
+  const resolvedAccountId = params.accountId ?? resolveDefaultQqAccountId(params.cfg as Parameters<typeof resolveDefaultQqAccountId>[0]);
+  const client = getActiveQqClient(resolvedAccountId);
+  if (!client) {
+    throw new Error(`QQ client not running for account ${resolvedAccountId}`);
+  }
+  const response = await client.sendAction("set_msg_emoji_like", {
+    message_id: Number(params.messageId),
+    emoji_id: params.emojiId,
+    set: false,
+  });
+  if (response.status !== "ok" && response.retcode !== 0) {
+    throw new Error(response.msg ?? `Failed to remove reaction: retcode=${response.retcode}`);
+  }
+}

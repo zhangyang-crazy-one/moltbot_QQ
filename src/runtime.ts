@@ -6,6 +6,9 @@ export function setQqRuntime(next: PluginRuntime): void {
   runtime = next;
 }
 
-export function getQqRuntime(): PluginRuntime | null {
+export function getQqRuntime(): PluginRuntime {
+  if (!runtime) {
+    throw new Error("QQ runtime not initialized");
+  }
   return runtime;
 }
