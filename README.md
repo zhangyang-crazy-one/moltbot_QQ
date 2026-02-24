@@ -78,9 +78,11 @@ openclaw gateway restart
 | `connection.type` | `ws` 或 `http` | `ws` |
 | `connection.host` | OneBot 11 后端地址 | - |
 | `connection.port` | OneBot 11 后端端口 | - |
+| `connection.secure` | 是否使用 TLS（`wss`/`https`） | `false` |
 | `connection.token` | 认证 token（可选） | - |
 | `connection.messageFormat` | `array` 或 `string` | `array` |
 | `connection.reportSelfMessage` | 是否处理 `message_sent` 事件 | `false` |
+| `connection.reportOfflineMessage` | 是否处理离线消息事件 | `false` |
 
 ### 安全策略
 
@@ -108,6 +110,9 @@ openclaw gateway restart
 - ✅ 发送消息
 - ✅ 回复消息
 - ✅ 撤回消息 (delete_msg)
+- ✅ 群管理（禁言/踢人/封禁）
+- ✅ 群名修改（renameGroup）
+- ✅ 群权限动作（permissions，默认只读，`apply=true` 才写入）
 - ✅ @提及检测
 - ✅ @全体成员检测
 

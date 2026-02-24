@@ -123,15 +123,30 @@ export const qqMessageActions: ChannelMessageActionAdapter = {
 
     if (action === "permissions") {
       const groupId = readStringParam(params, "groupId", { required: true });
-      const enable =
-        readBooleanValue(params, "enable", "wholeBan", "muteAll") ?? true;
+      const shouldApply =
+        readBooleanValue(params, "apply", "set", "mutate", "write") ?? false;
+      const enable = readBooleanValue(params, "enable", "wholeBan", "muteAll");
+      if (!shouldApply) {
+        return jsonResult({
+          ok: true,
+          action,
+          groupId,
+          mode: "inspect",
+          writable: true,
+          supportedUpdates: ["wholeBan"],
+          hint: "Set apply=true and enable=true|false to update QQ whole-group mute.",
+        });
+      }
+      if (enable === undefined) {
+        throw new Error("permissions apply requires enable=true|false");
+      }
       await setGroupWholeBan({
         cfg,
         accountId: accountId ?? undefined,
         groupId,
         enable,
       });
-      return jsonResult({ ok: true, action, groupId, enable });
+      return jsonResult({ ok: true, action, groupId, mode: "update", enable });
     }
 
     throw new Error(`Action ${action} not supported for qq.`);

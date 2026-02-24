@@ -61,10 +61,15 @@ function resolveConnectionBaseUrl(connection?: QQConnectionConfig): string | und
     const host = connection.host?.trim();
     const port = connection.port;
     if (!host || !port) return undefined;
-    return `${connection.type}://${host}:${port}`;
-  }
-  if (connection.type === "http-post" || connection.type === "ws-reverse") {
-    return connection.url?.trim() || undefined;
+    const protocol =
+      connection.type === "ws"
+        ? connection.secure
+          ? "wss"
+          : "ws"
+        : connection.secure
+          ? "https"
+          : "http";
+    return `${protocol}://${host}:${port}`;
   }
   return undefined;
 }
@@ -110,6 +115,7 @@ function parseConnectionInput(input: ChannelSetupInput): {
           type: "http",
           host,
           port,
+          secure: protocol === "https",
           token: input.token?.trim() || undefined,
         },
       };
@@ -120,6 +126,7 @@ function parseConnectionInput(input: ChannelSetupInput): {
           type: "ws",
           host,
           port,
+          secure: protocol === "wss",
           token: input.token?.trim() || undefined,
         },
       };
@@ -137,6 +144,7 @@ function parseConnectionInput(input: ChannelSetupInput): {
         type: "http",
         host,
         port,
+        secure: false,
         token: input.token?.trim() || undefined,
       },
     };
@@ -289,6 +297,7 @@ export const qqPlugin: ChannelPlugin<ResolvedQQAccount> = {
           "dmPolicy",
           "groupPolicy",
           "requireMention",
+          "groups",
           "defaultAccount",
         ],
       }),

@@ -210,7 +210,7 @@ describe("qqMessageActions", () => {
     });
   });
 
-  it("dispatches permissions action to set whole-group ban", async () => {
+  it("returns inspect mode for permissions action by default", async () => {
     const cfg = {} as OpenClawConfig;
     const result = await qqMessageActions.handleAction?.({
       channel: "qq",
@@ -218,6 +218,30 @@ describe("qqMessageActions", () => {
       cfg,
       params: {
         groupId: "3200",
+      },
+      accountId: "qq-main",
+    });
+    expect(mockSetGroupWholeBan).not.toHaveBeenCalled();
+    expect(result?.details).toEqual({
+      ok: true,
+      action: "permissions",
+      groupId: "3200",
+      mode: "inspect",
+      writable: true,
+      supportedUpdates: ["wholeBan"],
+      hint: "Set apply=true and enable=true|false to update QQ whole-group mute.",
+    });
+  });
+
+  it("dispatches permissions update when apply=true", async () => {
+    const cfg = {} as OpenClawConfig;
+    const result = await qqMessageActions.handleAction?.({
+      channel: "qq",
+      action: "permissions",
+      cfg,
+      params: {
+        groupId: "3200",
+        apply: true,
         enable: false,
       },
       accountId: "qq-main",
@@ -232,6 +256,7 @@ describe("qqMessageActions", () => {
       ok: true,
       action: "permissions",
       groupId: "3200",
+      mode: "update",
       enable: false,
     });
   });

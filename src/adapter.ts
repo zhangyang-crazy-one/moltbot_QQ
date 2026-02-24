@@ -68,8 +68,15 @@ export async function startQqClient(params: {
   return client;
 }
 
-function buildWsUrl(params: { host: string; port: number; path: string; token?: string }): string {
-  const base = `ws://${params.host}:${params.port}${params.path}`;
+function buildWsUrl(params: {
+  host: string;
+  port: number;
+  path: string;
+  secure?: boolean;
+  token?: string;
+}): string {
+  const protocol = params.secure ? "wss" : "ws";
+  const base = `${protocol}://${params.host}:${params.port}${params.path}`;
   if (!params.token) return base;
   const url = new URL(base);
   url.searchParams.set("access_token", params.token);
@@ -80,9 +87,11 @@ function buildHttpUrl(params: {
   host: string;
   port: number;
   path: string;
+  secure?: boolean;
   token?: string;
 }): string {
-  const base = `http://${params.host}:${params.port}${params.path}`;
+  const protocol = params.secure ? "https" : "http";
+  const base = `${protocol}://${params.host}:${params.port}${params.path}`;
   if (!params.token) return base;
   const url = new URL(base);
   url.searchParams.set("access_token", params.token);
@@ -174,6 +183,7 @@ class Ob11WsClient implements Ob11Client {
       host: connection.host,
       port: connection.port,
       path: "/api",
+      secure: connection.secure,
       token: connection.token,
     });
     const headers = createAuthHeaders(connection.token);
@@ -216,6 +226,7 @@ class Ob11WsClient implements Ob11Client {
       host: connection.host,
       port: connection.port,
       path: "/event",
+      secure: connection.secure,
       token: connection.token,
     });
     const headers = createAuthHeaders(connection.token);
@@ -320,6 +331,7 @@ class Ob11HttpClient implements Ob11Client {
       host: connection.host,
       port: connection.port,
       path: `/${action}`,
+      secure: connection.secure,
       token: connection.token,
     });
     const headers: Record<string, string> = {
@@ -365,6 +377,7 @@ class Ob11HttpClient implements Ob11Client {
       host: connection.host,
       port: connection.port,
       path: "/_events",
+      secure: connection.secure,
       token: connection.token,
     });
     const headers = createAuthHeaders(connection.token) ?? {};

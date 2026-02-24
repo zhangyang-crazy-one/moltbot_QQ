@@ -6,6 +6,7 @@ export type QQWsConnectionConfig = {
   type: "ws";
   host: string;
   port: number;
+  secure?: boolean;
   token?: string;
   heartInterval?: number;
   messageFormat?: QQMessageFormat;
@@ -17,26 +18,8 @@ export type QQHttpConnectionConfig = {
   type: "http";
   host: string;
   port: number;
+  secure?: boolean;
   token?: string;
-  messageFormat?: QQMessageFormat;
-  reportSelfMessage?: boolean;
-  reportOfflineMessage?: boolean;
-};
-
-export type QQHttpPostConnectionConfig = {
-  type: "http-post";
-  url: string;
-  token?: string;
-  messageFormat?: QQMessageFormat;
-  reportSelfMessage?: boolean;
-  reportOfflineMessage?: boolean;
-};
-
-export type QQWsReverseConnectionConfig = {
-  type: "ws-reverse";
-  url: string;
-  token?: string;
-  heartInterval?: number;
   messageFormat?: QQMessageFormat;
   reportSelfMessage?: boolean;
   reportOfflineMessage?: boolean;
@@ -44,9 +27,7 @@ export type QQWsReverseConnectionConfig = {
 
 export type QQConnectionConfig =
   | QQWsConnectionConfig
-  | QQHttpConnectionConfig
-  | QQHttpPostConnectionConfig
-  | QQWsReverseConnectionConfig;
+  | QQHttpConnectionConfig;
 
 export type QQGroupConfig = {
   requireMention?: boolean;

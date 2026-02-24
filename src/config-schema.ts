@@ -13,6 +13,7 @@ const wsConnectionSchema = z.object({
   type: z.literal("ws"),
   host: z.string(),
   port: z.number(),
+  secure: z.boolean().optional(),
   token: z.string().optional(),
   heartInterval: z.number().optional(),
   messageFormat: z.enum(["array", "string"]).default("array"),
@@ -24,37 +25,14 @@ const httpConnectionSchema = z.object({
   type: z.literal("http"),
   host: z.string(),
   port: z.number(),
+  secure: z.boolean().optional(),
   token: z.string().optional(),
   messageFormat: z.enum(["array", "string"]).default("array"),
   reportSelfMessage: z.boolean().optional(),
   reportOfflineMessage: z.boolean().optional(),
 });
 
-const httpPostConnectionSchema = z.object({
-  type: z.literal("http-post"),
-  url: z.string(),
-  token: z.string().optional(),
-  messageFormat: z.enum(["array", "string"]).default("array"),
-  reportSelfMessage: z.boolean().optional(),
-  reportOfflineMessage: z.boolean().optional(),
-});
-
-const wsReverseConnectionSchema = z.object({
-  type: z.literal("ws-reverse"),
-  url: z.string(),
-  token: z.string().optional(),
-  heartInterval: z.number().optional(),
-  messageFormat: z.enum(["array", "string"]).default("array"),
-  reportSelfMessage: z.boolean().optional(),
-  reportOfflineMessage: z.boolean().optional(),
-});
-
-const connectionSchema = z.discriminatedUnion("type", [
-  wsConnectionSchema,
-  httpConnectionSchema,
-  httpPostConnectionSchema,
-  wsReverseConnectionSchema,
-]);
+const connectionSchema = z.discriminatedUnion("type", [wsConnectionSchema, httpConnectionSchema]);
 
 const qqAccountSchema = z.object({
   name: z.string().optional(),
