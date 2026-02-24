@@ -2,6 +2,25 @@ import type { OpenClawConfig } from "openclaw/plugin-sdk";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "openclaw/plugin-sdk";
 import type { QQAccountConfig, QQConfig, QQConnectionConfig, ResolvedQQAccount } from "./types.js";
 
+export interface ResolvedGroupConfig {
+  requireMention: boolean;
+  agentId?: string;
+  enabled: boolean;
+}
+
+export function resolveGroupConfig(
+  accountCfg: QQAccountConfig,
+  groupId: string,
+): ResolvedGroupConfig {
+  const specific = accountCfg.groups?.[groupId];
+  const wildcard = accountCfg.groups?.["*"];
+  return {
+    requireMention: specific?.requireMention ?? wildcard?.requireMention ?? accountCfg.requireMention ?? true,
+    agentId: specific?.agentId ?? wildcard?.agentId,
+    enabled: specific?.enabled ?? wildcard?.enabled ?? true,
+  };
+}
+
 function listConfiguredAccountIds(cfg: OpenClawConfig): string[] {
   const accounts = (cfg.channels?.qq as QQConfig | undefined)?.accounts;
   if (!accounts || typeof accounts !== "object") return [];

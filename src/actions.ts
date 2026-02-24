@@ -7,6 +7,8 @@ import {
   kickUser,
   muteUser,
   removeReaction,
+  setGroupName,
+  setGroupWholeBan,
 } from "./outbound.js";
 
 function resolveDurationSeconds(params: Record<string, unknown>): number {
@@ -26,7 +28,21 @@ function resolveDurationSeconds(params: Record<string, unknown>): number {
 }
 
 function listSupportedActions(): ChannelMessageActionName[] {
-  return ["send", "react", "delete", "timeout", "kick", "ban"];
+  return ["send", "react", "delete", "timeout", "kick", "ban", "renameGroup", "permissions"];
+}
+
+function readBooleanValue(params: Record<string, unknown>, ...keys: string[]): boolean | undefined {
+  for (const key of keys) {
+    const value = params[key];
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value !== 0;
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === "true" || normalized === "1" || normalized === "yes") return true;
+      if (normalized === "false" || normalized === "0" || normalized === "no") return false;
+    }
+  }
+  return undefined;
 }
 
 export const qqMessageActions: ChannelMessageActionAdapter = {
@@ -89,6 +105,33 @@ export const qqMessageActions: ChannelMessageActionAdapter = {
         rejectAdd,
       });
       return jsonResult({ ok: true, action, rejectAdd });
+    }
+
+    if (action === "renameGroup") {
+      const groupId = readStringParam(params, "groupId", { required: true });
+      const name =
+        readStringParam(params, "name") ??
+        readStringParam(params, "groupName", { required: true });
+      await setGroupName({
+        cfg,
+        accountId: accountId ?? undefined,
+        groupId,
+        name,
+      });
+      return jsonResult({ ok: true, action, groupId, name });
+    }
+
+    if (action === "permissions") {
+      const groupId = readStringParam(params, "groupId", { required: true });
+      const enable =
+        readBooleanValue(params, "enable", "wholeBan", "muteAll") ?? true;
+      await setGroupWholeBan({
+        cfg,
+        accountId: accountId ?? undefined,
+        groupId,
+        enable,
+      });
+      return jsonResult({ ok: true, action, groupId, enable });
     }
 
     throw new Error(`Action ${action} not supported for qq.`);

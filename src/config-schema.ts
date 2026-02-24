@@ -3,6 +3,12 @@ import { z } from "zod";
 
 const allowFromEntry = z.union([z.string(), z.number()]);
 
+const groupConfigSchema = z.object({
+  requireMention: z.boolean().optional(),
+  agentId: z.string().optional(),
+  enabled: z.boolean().optional(),
+});
+
 const wsConnectionSchema = z.object({
   type: z.literal("ws"),
   host: z.string(),
@@ -60,6 +66,7 @@ const qqAccountSchema = z.object({
   dmPolicy: DmPolicySchema.optional(),
   groupPolicy: GroupPolicySchema.optional(),
   requireMention: z.boolean().optional(),
+  groups: z.record(z.string(), groupConfigSchema).optional(),
 });
 
 export const QQConfigSchema = qqAccountSchema.extend({

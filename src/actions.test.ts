@@ -7,6 +7,8 @@ import {
   kickUser,
   muteUser,
   removeReaction,
+  setGroupName,
+  setGroupWholeBan,
 } from "./outbound.js";
 import { listEnabledQqAccounts } from "./config.js";
 
@@ -20,6 +22,8 @@ vi.mock("./outbound.js", () => ({
   muteUser: vi.fn(),
   kickUser: vi.fn(),
   deleteQqMessage: vi.fn(),
+  setGroupName: vi.fn(),
+  setGroupWholeBan: vi.fn(),
 }));
 
 const mockListEnabledQqAccounts = vi.mocked(listEnabledQqAccounts);
@@ -28,6 +32,8 @@ const mockRemoveReaction = vi.mocked(removeReaction);
 const mockMuteUser = vi.mocked(muteUser);
 const mockKickUser = vi.mocked(kickUser);
 const mockDeleteQqMessage = vi.mocked(deleteQqMessage);
+const mockSetGroupName = vi.mocked(setGroupName);
+const mockSetGroupWholeBan = vi.mocked(setGroupWholeBan);
 
 describe("qqMessageActions", () => {
   beforeEach(() => {
@@ -50,6 +56,8 @@ describe("qqMessageActions", () => {
       "timeout",
       "kick",
       "ban",
+      "renameGroup",
+      "permissions",
     ]);
   });
 
@@ -174,5 +182,57 @@ describe("qqMessageActions", () => {
       messageId: "9001",
     });
     expect(result?.details).toEqual({ ok: true, action: "delete", messageId: "9001" });
+  });
+
+  it("dispatches renameGroup action", async () => {
+    const cfg = {} as OpenClawConfig;
+    const result = await qqMessageActions.handleAction?.({
+      channel: "qq",
+      action: "renameGroup",
+      cfg,
+      params: {
+        groupId: "3100",
+        name: "new-group-name",
+      },
+      accountId: "qq-main",
+    });
+    expect(mockSetGroupName).toHaveBeenCalledWith({
+      cfg,
+      accountId: "qq-main",
+      groupId: "3100",
+      name: "new-group-name",
+    });
+    expect(result?.details).toEqual({
+      ok: true,
+      action: "renameGroup",
+      groupId: "3100",
+      name: "new-group-name",
+    });
+  });
+
+  it("dispatches permissions action to set whole-group ban", async () => {
+    const cfg = {} as OpenClawConfig;
+    const result = await qqMessageActions.handleAction?.({
+      channel: "qq",
+      action: "permissions",
+      cfg,
+      params: {
+        groupId: "3200",
+        enable: false,
+      },
+      accountId: "qq-main",
+    });
+    expect(mockSetGroupWholeBan).toHaveBeenCalledWith({
+      cfg,
+      accountId: "qq-main",
+      groupId: "3200",
+      enable: false,
+    });
+    expect(result?.details).toEqual({
+      ok: true,
+      action: "permissions",
+      groupId: "3200",
+      enable: false,
+    });
   });
 });

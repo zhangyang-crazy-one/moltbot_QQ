@@ -203,6 +203,27 @@ export async function kickUser(params: {
   }
 }
 
+export async function setGroupName(params: {
+  cfg: { channels?: { qq?: unknown } };
+  accountId?: string;
+  groupId: string;
+  name: string;
+}): Promise<void> {
+  const resolvedAccountId =
+    params.accountId ?? resolveDefaultQqAccountId(params.cfg as Parameters<typeof resolveDefaultQqAccountId>[0]);
+  const client = getActiveQqClient(resolvedAccountId);
+  if (!client) {
+    throw new Error(`QQ client not running for account ${resolvedAccountId}`);
+  }
+  const response = await client.sendAction("set_group_name", {
+    group_id: Number(params.groupId),
+    group_name: params.name,
+  });
+  if (response.status !== "ok" && response.retcode !== 0) {
+    throw new Error(response.msg ?? `Failed to set group name: retcode=${response.retcode}`);
+  }
+}
+
 export async function setGroupCard(params: {
   cfg: { channels?: { qq?: unknown } };
   accountId?: string;

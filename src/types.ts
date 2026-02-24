@@ -48,6 +48,12 @@ export type QQConnectionConfig =
   | QQHttpPostConnectionConfig
   | QQWsReverseConnectionConfig;
 
+export type QQGroupConfig = {
+  requireMention?: boolean;
+  agentId?: string;
+  enabled?: boolean;
+};
+
 export type QQAccountConfig = {
   name?: string;
   enabled?: boolean;
@@ -58,6 +64,7 @@ export type QQAccountConfig = {
   dmPolicy?: DmPolicy;
   groupPolicy?: GroupPolicy;
   requireMention?: boolean;
+  groups?: Record<string, QQGroupConfig>;
 };
 
 export type QQConfig = QQAccountConfig & {
@@ -91,6 +98,7 @@ export type OB11MessageEvent = {
   message?: string | OB11MessageSegment[];
   raw_message?: string;
   message_id?: number | string;
+  sub_type?: string;
   user_id?: number;
   group_id?: number;
   self_id?: number;

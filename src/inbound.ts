@@ -8,6 +8,7 @@ import {
 } from "openclaw/plugin-sdk";
 import type { OB11Event, ResolvedQQAccount } from "./types.js";
 import { getActiveQqClient } from "./adapter.js";
+import { resolveGroupConfig } from "./config.js";
 import { parseOb11Message, hasSelfMention } from "./message-utils.js";
 import { getQqRuntime } from "./runtime.js";
 import { rememberSelfSentResponse, wasSelfSentMessage } from "./self-sent.js";
@@ -65,6 +66,14 @@ export async function handleOb11Event(params: {
     if (postType !== "message" && postType !== "message_sent") {
       return;
     }
+    const subType = String(event.sub_type ?? "").toLowerCase();
+    if (
+      postType === "message" &&
+      subType === "offline" &&
+      !account.connection?.reportOfflineMessage
+    ) {
+      return;
+    }
 
     const messageType = String(event.message_type ?? "").toLowerCase();
     const isGroup = messageType === "group";
@@ -78,6 +87,7 @@ export async function handleOb11Event(params: {
     if (!target) {
       return;
     }
+    const groupConfig = isGroup ? resolveGroupConfig(account.config, groupId ?? "") : null;
 
     if (postType === "message_sent" && !account.connection?.reportSelfMessage) {
       return;
@@ -154,6 +164,10 @@ export async function handleOb11Event(params: {
     const commandAuthorized = commandGate.commandAuthorized;
 
     if (isGroup) {
+      if (!groupConfig?.enabled) {
+        runtime.log?.(`qq: drop group ${groupId ?? ""} (group disabled in config)`);
+        return;
+      }
       if (groupPolicy === "disabled") {
         runtime.log?.(`qq: drop group ${groupId ?? ""} (groupPolicy=disabled)`);
         return;
@@ -176,7 +190,7 @@ export async function handleOb11Event(params: {
         return;
       }
 
-      const requireMention = account.config.requireMention ?? true;
+      const requireMention = groupConfig?.requireMention ?? true;
       const mentionGate = resolveMentionGatingWithBypass({
         isGroup,
         requireMention,
@@ -243,12 +257,13 @@ export async function handleOb11Event(params: {
         id: isGroup ? (groupId ?? senderId) : senderId,
       },
     }) ?? { agentId: "default", sessionKey: "" };
+    const effectiveAgentId = groupConfig?.agentId ?? route.agentId;
 
     const senderName = event.sender?.card?.trim() || event.sender?.nickname?.trim() || undefined;
     const fromLabel = isGroup ? `group:${groupId ?? ""}` : senderName || `user:${senderId}`;
 
     const storePath = core.channel?.session?.resolveStorePath(config.session?.store, {
-      agentId: route.agentId,
+      agentId: effectiveAgentId,
     }) ?? "";
     const envelopeOptions = core.channel?.reply?.resolveEnvelopeFormatOptions(config as OpenClawConfig) ?? {};
     const previousTimestamp = core.channel?.session?.readSessionUpdatedAt({
