@@ -7,7 +7,8 @@
     "openclaw": "workspace:*"
   },
   "dependencies": {
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "zod": "^4.3.6"
   },
   "openclaw": {
     "extensions": [
