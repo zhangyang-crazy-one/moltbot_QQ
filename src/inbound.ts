@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   logInboundDrop,
   mergeAllowlist,
@@ -6,9 +9,15 @@ import {
   type OpenClawConfig,
   type RuntimeEnv,
 } from "openclaw/plugin-sdk";
-import type { OB11Event, ResolvedQQAccount } from "./types.js";
+import type {
+  OB11ActionResponse,
+  OB11Event,
+  OB11MessageSegment,
+  ResolvedQQAccount,
+} from "./types.js";
 import { getActiveQqClient } from "./adapter.js";
 import { resolveGroupConfig } from "./config.js";
+import { parseCqSegments } from "./cqcode.js";
 import { parseOb11Message, hasSelfMention } from "./message-utils.js";
 import { getQqRuntime } from "./runtime.js";
 import { rememberSelfSentResponse, wasSelfSentMessage } from "./self-sent.js";
@@ -16,6 +25,7 @@ import { sendOb11Message } from "./send.js";
 import { formatQqTarget, normalizeAllowEntry, type QQTarget } from "./targets.js";
 
 const CHANNEL_ID = "qq" as const;
+const QQ_INBOUND_MEDIA_MAX_BYTES = 5 * 1024 * 1024;
 
 type StatusSink = (patch: { lastInboundAt?: number; lastOutboundAt?: number }) => void;
 
@@ -50,6 +60,279 @@ function buildTarget(params: {
     return { kind: "group", id: params.groupId };
   }
   return { kind: "private", id: params.senderId };
+}
+
+function toSegmentString(value: unknown): string {
+  if (value == null) return "";
+  return String(value).trim();
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function resolveLocalMediaPath(value: string): string | null {
+  if (!value) return null;
+  if (value.startsWith("file://")) {
+    try {
+      return fileURLToPath(value);
+    } catch {
+      return null;
+    }
+  }
+  return path.isAbsolute(value) ? value : null;
+}
+
+function isOb11ActionSuccess(response: OB11ActionResponse | undefined): boolean {
+  if (!response) return false;
+  if (typeof response.status === "string" && response.status.toLowerCase() !== "ok") {
+    return false;
+  }
+  if (typeof response.retcode === "number" && response.retcode !== 0) {
+    return false;
+  }
+  return true;
+}
+
+function extractMediaSourceFromActionData(value: unknown, depth = 0): string | null {
+  if (depth > 4 || value == null) return null;
+  if (typeof value === "string") {
+    const candidate = value.trim();
+    if (!candidate) return null;
+    if (isHttpUrl(candidate)) return candidate;
+    if (resolveLocalMediaPath(candidate)) return candidate;
+    return null;
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const matched = extractMediaSourceFromActionData(entry, depth + 1);
+      if (matched) return matched;
+    }
+    return null;
+  }
+  if (typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const key of ["file", "path", "url", "src", "download", "download_url"]) {
+    const matched = extractMediaSourceFromActionData(record[key], depth + 1);
+    if (matched) return matched;
+  }
+  for (const nested of Object.values(record)) {
+    const matched = extractMediaSourceFromActionData(nested, depth + 1);
+    if (matched) return matched;
+  }
+  return null;
+}
+
+function buildInboundMediaResolutionActions(params: {
+  segmentType: string;
+  fileToken: string;
+}): Array<{ action: string; payload: Record<string, unknown> }> {
+  const fileToken = params.fileToken.trim();
+  if (!fileToken || isHttpUrl(fileToken) || resolveLocalMediaPath(fileToken)) {
+    return [];
+  }
+
+  if (params.segmentType === "image") {
+    return [{ action: "get_image", payload: { file: fileToken } }];
+  }
+  if (params.segmentType === "record") {
+    return [
+      { action: "get_record", payload: { file: fileToken } },
+      { action: "get_record", payload: { file: fileToken, out_format: "mp3" } },
+    ];
+  }
+  if (params.segmentType === "video") {
+    return [{ action: "get_video", payload: { file: fileToken } }];
+  }
+  return [];
+}
+
+async function resolveInboundMediaSourceViaOneBot(params: {
+  accountId: string;
+  segmentType: string;
+  fileToken: string;
+  runtime: RuntimeEnv;
+}): Promise<string | null> {
+  const client = getActiveQqClient(params.accountId);
+  if (!client) return null;
+
+  const attempts = buildInboundMediaResolutionActions({
+    segmentType: params.segmentType,
+    fileToken: params.fileToken,
+  });
+  for (const attempt of attempts) {
+    try {
+      const response = await client.sendAction(attempt.action, attempt.payload);
+      if (!isOb11ActionSuccess(response)) {
+        continue;
+      }
+      const source = extractMediaSourceFromActionData(response.data);
+      if (source) return source;
+    } catch (err) {
+      params.runtime.log?.(
+        `qq: media action ${attempt.action} failed for ${params.segmentType}: ${String(err)}`,
+      );
+    }
+  }
+  return null;
+}
+
+async function resolveInboundMediaUrl(params: {
+  source: string;
+  fileNameHint?: string;
+  runtime: RuntimeEnv;
+}): Promise<string> {
+  const source = params.source.trim();
+  if (!source) return source;
+
+  const core = getQqRuntime();
+  const media = core.channel?.media;
+  if (!media) return source;
+
+  try {
+    if (isHttpUrl(source)) {
+      const fetched = await media.fetchRemoteMedia({
+        url: source,
+        filePathHint: params.fileNameHint || source,
+        maxBytes: QQ_INBOUND_MEDIA_MAX_BYTES,
+      });
+      const saved = await media.saveMediaBuffer(
+        fetched.buffer,
+        fetched.contentType,
+        "inbound",
+        QQ_INBOUND_MEDIA_MAX_BYTES,
+        fetched.fileName ?? params.fileNameHint,
+      );
+      return saved.path;
+    }
+
+    const localPath = resolveLocalMediaPath(source);
+    if (!localPath) {
+      return source;
+    }
+    const buffer = await fs.readFile(localPath);
+    const saved = await media.saveMediaBuffer(
+      buffer,
+      undefined,
+      "inbound",
+      QQ_INBOUND_MEDIA_MAX_BYTES,
+      params.fileNameHint ?? path.basename(localPath),
+    );
+    return saved.path;
+  } catch (err) {
+    params.runtime.log?.(`qq: failed to localize inbound media ${source}: ${String(err)}`);
+    return source;
+  }
+}
+
+function replaceMediaReferences(raw: string, replacements: Map<string, string>): string {
+  if (!raw || replacements.size === 0) {
+    return raw;
+  }
+  let next = raw;
+  for (const [from, to] of replacements) {
+    if (!from || !to || from === to) continue;
+    next = next.split(from).join(to);
+  }
+  return next;
+}
+
+async function collectInboundMedia(params: {
+  accountId: string;
+  segments: OB11MessageSegment[] | undefined;
+  runtime: RuntimeEnv;
+}): Promise<{ mediaInfo: string; mediaUrls: string[]; replacements: Map<string, string> }> {
+  const mediaInfoLines: string[] = [];
+  const mediaUrls: string[] = [];
+  const replacements = new Map<string, string>();
+  const segments = params.segments ?? [];
+
+  for (const seg of segments) {
+    if (seg.type !== "image" && seg.type !== "video" && seg.type !== "record" && seg.type !== "file") {
+      continue;
+    }
+
+    const fileCandidate = toSegmentString(seg.data?.file);
+    const urlCandidate = toSegmentString(seg.data?.url);
+    const oneBotSource = await resolveInboundMediaSourceViaOneBot({
+      accountId: params.accountId,
+      segmentType: seg.type,
+      fileToken: fileCandidate,
+      runtime: params.runtime,
+    });
+    // Prefer local file paths from OneBot payloads when available.
+    const source = oneBotSource || (resolveLocalMediaPath(fileCandidate)
+      ? fileCandidate
+      : (urlCandidate || fileCandidate));
+    if (!source) {
+      continue;
+    }
+
+    const fileNameHint =
+      toSegmentString(seg.data?.name) ||
+      (seg.type === "file" ? path.basename(source) : "") ||
+      undefined;
+    const resolved = await resolveInboundMediaUrl({
+      source,
+      fileNameHint,
+      runtime: params.runtime,
+    });
+
+    mediaUrls.push(resolved);
+    if (resolved !== source) {
+      replacements.set(source, resolved);
+    }
+    if (urlCandidate && resolved !== urlCandidate) {
+      replacements.set(urlCandidate, resolved);
+    }
+    if (fileCandidate && resolved !== fileCandidate) {
+      replacements.set(fileCandidate, resolved);
+    }
+
+    if (seg.type === "image") {
+      mediaInfoLines.push(`[Image: ${resolved}]`);
+      continue;
+    }
+    if (seg.type === "video") {
+      mediaInfoLines.push(`[Video: ${resolved}]`);
+      continue;
+    }
+    if (seg.type === "record") {
+      mediaInfoLines.push(`[Voice: ${resolved}]`);
+      continue;
+    }
+    const displayName = fileNameHint || "file";
+    mediaInfoLines.push(`[File: ${displayName}]`);
+  }
+
+  return {
+    mediaInfo: mediaInfoLines.join("\n"),
+    mediaUrls,
+    replacements,
+  };
+}
+
+function resolveInboundSegments(
+  message?: string | OB11MessageSegment[],
+): OB11MessageSegment[] | undefined {
+  if (Array.isArray(message)) {
+    return message;
+  }
+  if (typeof message !== "string" || !message.trim()) {
+    return undefined;
+  }
+  return parseCqSegments(message).map((segment) => ({
+    type: segment.type,
+    data: segment.data,
+  }));
 }
 
 export async function handleOb11Event(params: {
@@ -94,18 +377,19 @@ export async function handleOb11Event(params: {
     }
     const parsed = parseOb11Message(event.message ?? event.raw_message);
     const rawBody = parsed.text.trim();
+    const inboundSegments = resolveInboundSegments(event.message ?? event.raw_message);
 
     // Check if message has any content (text or attachments)
     const hasTextContent = rawBody.length > 0;
-    const hasMediaContent = (event.message && Array.isArray(event.message))
-      ? event.message.some(
-          (seg) =>
-            seg.type === "image" ||
-            seg.type === "video" ||
-            seg.type === "record" ||
-            seg.type === "file",
-        )
-      : false;
+    const hasMediaContent = Boolean(
+      inboundSegments?.some(
+        (seg) =>
+          seg.type === "image" ||
+          seg.type === "video" ||
+          seg.type === "record" ||
+          seg.type === "file",
+      ),
+    );
 
     if (!hasTextContent && !hasMediaContent) {
       return;
@@ -277,45 +561,17 @@ export async function handleOb11Event(params: {
       sessionKey: route.sessionKey,
     }) ?? Date.now();
 
-    // Extract media URLs from message segments
-    let mediaInfo = "";
-    const mediaUrls: string[] = [];
-    if (event.message && Array.isArray(event.message)) {
-      for (const seg of event.message) {
-        if (seg.type === "image") {
-          const url = seg.data?.url || seg.data?.file;
-          if (url) {
-            mediaUrls.push(url);
-            mediaInfo += `[Image: ${url}]\n`;
-          }
-        }
-        if (seg.type === "video") {
-          const url = seg.data?.url || seg.data?.file;
-          if (url) {
-            mediaUrls.push(url);
-            mediaInfo += `[Video: ${url}]\n`;
-          }
-        }
-        if (seg.type === "record") {
-          const url = seg.data?.url || seg.data?.file;
-          if (url) {
-            mediaUrls.push(url);
-            mediaInfo += `[Voice: ${url}]\n`;
-          }
-        }
-        if (seg.type === "file") {
-          const url = seg.data?.url || seg.data?.file;
-          if (url) {
-            mediaUrls.push(url);
-            const fileName = seg.data?.name || seg.data?.file || "file";
-            mediaInfo += `[File: ${fileName}]\n`;
-          }
-        }
-      }
-    }
+    const media = await collectInboundMedia({
+      accountId: account.accountId,
+      segments: inboundSegments,
+      runtime,
+    });
+    const normalizedRawBody = replaceMediaReferences(rawBody, media.replacements);
 
     // Combine text body with media info
-    const fullBody = rawBody ? (rawBody + "\n" + mediaInfo).trim() : mediaInfo.trim();
+    const fullBody = normalizedRawBody
+      ? (normalizedRawBody + "\n" + media.mediaInfo).trim()
+      : media.mediaInfo.trim();
 
     const body = core.channel?.reply?.formatAgentEnvelope({
       channel: "QQ",
@@ -323,8 +579,8 @@ export async function handleOb11Event(params: {
       timestamp,
       previousTimestamp,
       envelope: envelopeOptions,
-      body: rawBody,
-    }) ?? rawBody;
+      body: normalizedRawBody,
+    }) ?? normalizedRawBody;
 
     const ctxPayload = core.channel?.reply?.finalizeInboundContext({
       Body: body,
@@ -348,7 +604,7 @@ export async function handleOb11Event(params: {
       OriginatingChannel: CHANNEL_ID,
       OriginatingTo: `qq:${formatQqTarget(target)}`,
       CommandAuthorized: commandAuthorized,
-      MediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+      MediaUrls: media.mediaUrls.length > 0 ? media.mediaUrls : undefined,
     });
 
     if (!ctxPayload) {
